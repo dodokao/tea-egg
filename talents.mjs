@@ -55,6 +55,10 @@ export function talentLayout(width) {
 export function initTalents(getState,buy,onError) {
   const dialog=document.querySelector('#talent-dialog'),board=dialog.querySelector('.talent-board'),svg=board.querySelector('svg'),detail=dialog.querySelector('.talent-detail'),nodes=[];
   let selected=0,busy=false;
+  const scroller=dialog.querySelector('.talent-scroller'),toggle=document.createElement('button');
+  toggle.className='talent-tree-toggle';toggle.type='button';scroller.id='skill-tree';toggle.setAttribute('aria-controls',scroller.id);scroller.before(toggle);
+  function foldTree(folded){scroller.hidden=folded;toggle.setAttribute('aria-expanded',String(!folded));toggle.textContent=folded?'展开技能图 ▾':'收起技能图 ▴';dialog.querySelector('.mobile-tree-hint').hidden=folded;if(!folded&&nodes.length)draw();}
+  toggle.onclick=()=>foldTree(!scroller.hidden);foldTree(false);
   const guide=document.createElement('div');guide.className='talent-guide';guide.innerHTML='<strong>解锁卖蛋 · 点亮你的小摊</strong><p>「开摊入门」是技能树的中心。免费点亮后，就能把刚刚剥好的蛋卖出去，收到第一笔收入。</p><button class="primary-button">免费点亮「开摊入门」 →</button>';dialog.querySelector('.talent-summary').after(guide);
   guide.querySelector('button').onclick=()=>{selected=0;render();detail.querySelector('button').click();};
   for(const t of talents){const node=document.createElement('button');node.className='talent-node';node.dataset.id=t.id;node.innerHTML=`<span class="talent-symbol" aria-hidden="true">${talentIcon(t.icon)}</span><small></small><span class="talent-name">${t.name}</span>`;node.onclick=()=>{selected=t.id;render();if(matchMedia('(max-width:700px)').matches)detail.scrollIntoView({behavior:'instant',block:'start'});};board.append(node);nodes.push(node);}
@@ -82,6 +86,6 @@ export function initTalents(getState,buy,onError) {
   }
   detail.querySelector('button').onclick=async()=>{if(busy)return;busy=true;const id=selected,rank=getState().talents[id];render();try{await buy(id,rank);if(id===0&&rank===0)dialog.close();}catch(error){onError(error.message);}finally{busy=false;render();}};
   document.querySelector('#open-talents').onclick=()=>{if(!getState()?.talents[0])selected=0;dialog.showModal();render();dialog.scrollTop=0;const scroller=dialog.querySelector('.talent-scroller');scroller.scrollLeft=Math.max(0,(board.clientWidth-scroller.clientWidth)/2);};document.querySelector('#close-talents').onclick=()=>dialog.close();
-  dialog.querySelector('.back-to-tree').onclick=()=>dialog.querySelector('.talent-scroller').scrollIntoView({behavior:'instant',block:'start'});
+  dialog.querySelector('.back-to-tree').onclick=()=>{foldTree(false);scroller.scrollIntoView({behavior:'instant',block:'start'});};
   new ResizeObserver(draw).observe(board);render();return ()=>{if(dialog.open)render();};
 }
