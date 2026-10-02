@@ -9,7 +9,7 @@ import {stampArt,stampUrl} from './stamps.mjs?v=20261002-fast';
 import {initFinance} from './finance.mjs?v=20261002-peel';
 initFinance();
 const $=selector=>document.querySelector(selector);
-const surfacePhotos=await Promise.all(['./shell-albedo.jpg','./white-albedo.jpg'].map(src=>new THREE.ImageLoader().loadAsync(src))).catch(error=>{console.warn('Surface texture unavailable',error);return [];});
+const surfacePhotos=Promise.all(['./shell-albedo.webp','./white-albedo.webp'].map(src=>new THREE.ImageLoader().loadAsync(src))).catch(error=>{console.warn('Surface texture unavailable',error);return [];});
 let reducedMotion=matchMedia('(prefers-reduced-motion: reduce)').matches;
 try{const saved=localStorage.getItem('tea-reduced-motion');if(saved!==null)reducedMotion=saved==='on';}catch{}
 const canvas = document.querySelector('#game');
@@ -153,7 +153,7 @@ async function startRound(active=gameState?.active) {
   const character=['basketball','penguin'].includes(eggKind.motif),century=eggKind.motif==='century',gray=eggKind.name==='乌鸡蛋';
   wholeMaterial.color.set('#ffffff');shellMaterial.color.set('#ffffff');whiteMaterial.color.set(character||century?'#ffffff':eggKind.whiteTint);whiteMaterial.roughness=century?.18:gray?.28:character?.34:.39;whiteMaterial.clearcoat=century?.65:gray?.28:.16;whiteMaterial.clearcoatRoughness=gray?.30:.38;whiteMaterial.envMapIntensity=gray?.25:1;whiteMaterial.specularColor.set(gray?'#edf1ff':'#ffffff');whiteMaterial.transmission=century?.08:0;whiteMaterial.thickness=century?.12:0;whiteMaterial.attenuationColor.set('#c48e43');whiteMaterial.attenuationDistance=2;insideMaterial.color.set(eggKind.innerTint);shellMaterial.bumpScale=character?.003:eggKind.speckles?.022:.014;wholeMaterial.bumpScale=character?.003:.014;
   cells=makeCells();round=createRound(cells.map(c=>c.neighbors),Math.random,roundEffects.peels,roundEffects);roundId=active.id;
-  textures=await makeTexturesAsync(cells,surfacePhotos,Math.random,eggKind,teaKind,512);
+  textures=await makeTexturesAsync(cells,await surfacePhotos,Math.random,eggKind,teaKind,512);
   wholeMaterial.map=textures[0];wholeMaterial.bumpMap=textures[3];wholeMaterial.needsUpdate=true;
   shellMaterial.map=textures[1];shellMaterial.bumpMap=textures[3];shellMaterial.needsUpdate=true;
   whiteMaterial.map=textures[2];whiteMaterial.bumpMap=textures[3];whiteMaterial.bumpScale=century?.0006:character?.0005:.002;whiteMaterial.needsUpdate=true;

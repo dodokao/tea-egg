@@ -6,6 +6,8 @@
   <meta name="theme-color" content="#bdc9ba">
   <meta name="description" content="敲一敲，慢慢剥。听蛋壳轻轻落下，露出一颗独一无二的茶叶蛋。">
   <title>茶叶蛋小摊</title>
+  <link rel="preload" as="image" href="./shell-albedo.webp" crossorigin="anonymous">
+  <link rel="preload" as="image" href="./white-albedo.webp" crossorigin="anonymous">
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect width='40' height='40' rx='11' fill='%23f3efe5'/%3E%3Cpath d='M20 5C12 5 7 20 7 26a13 13 0 0 0 26 0C33 20 28 5 20 5Z' fill='%238e5833'/%3E%3Cpath d='m21 6-4 12 8 6-6 11m-2-17-9 6m17 0 7-5' fill='none' stroke='%23f2d5a2' stroke-width='2'/%3E%3C/svg%3E">
   <link rel="stylesheet" href="./style.css?v=20261002-scroll">
 </head>
@@ -45,6 +47,6 @@
   <dialog id="finance-dialog" aria-labelledby="finance-title"><button class="dialog-close" id="close-finance" aria-label="关闭零钱明细">×</button><span class="eyebrow">小摊财务 · 每一分都有来处</span><h2 id="finance-title">零钱明细</h2><div class="finance-head"><p>看见积累，也看懂收益。</p><button id="refresh-finance">刷新账本 ↻</button></div><p id="finance-status" role="status"></p><div id="finance-content" hidden><div class="finance-metrics" id="finance-metrics"></div><section class="finance-chart"><div class="finance-section-head"><h3>余额走势</h3><span>最近 200 笔 · 按交易顺序</span></div><div id="balance-chart"></div></section><div class="finance-analysis" id="finance-analysis"></div><div class="finance-section-head"><h3>收支流水</h3><select id="finance-filter" aria-label="筛选收支明细"><option value="all">全部交易</option><option value="income">收入</option><option value="expense">支出</option><option value="sell">卖蛋</option><option value="talent">技能</option></select></div><div id="finance-entries"></div><p class="storage-note">详细账本从本功能上线后开始记录；更早的零钱已包含在期初余额中。经营利润为卖蛋收入减去对应进货成本，不含礼品奖励和技能投入。概览统计全部已记录交易，图表与流水展示最近 200 笔。</p></div></dialog>
 <dialog id="gift-dialog" aria-labelledby="gift-title"><button class="dialog-close" id="close-gift" aria-label="关闭礼品码兑换">×</button><span class="eyebrow">给小摊的一份礼物</span><h2 id="gift-title">礼品码兑换</h2><p>输入礼品码，领取你的小奖励。</p><form id="gift-form" class="gift-form"><label for="gift-code">礼品码兑换</label><div><input id="gift-code" name="code" maxlength="64" autocomplete="off" autocapitalize="none" placeholder="输入礼品码" required><button class="primary-button" id="redeem-gift" type="submit">兑换</button></div><p id="gift-status" role="status"></p></form></dialog>
 <dialog id="order-dialog" aria-labelledby="order-title"><button class="dialog-close" id="close-order" aria-label="关闭指定原料">×</button><h2 id="order-title">指定下一颗蛋</h2><p>选择蛋种或茶种，另一项随机。指定费 15 元，进货费 2 元，共计 17 元。</p><label class="order-field">指定类型<select id="order-kind"><option value="egg">蛋种</option><option value="tea">茶种</option></select></label><label class="order-field">选择原料<select id="order-item"></select></label><p id="order-status" role="status"></p><button class="primary-button" id="confirm-order">确认进货 · ¥17.00</button></dialog>
-  <script type="module" src="./game.js?v=20261002-peel"></script>
+  <script type="module" src="./game.bundle.js?v=20261002-init"></script>
 </body>
 </html>
