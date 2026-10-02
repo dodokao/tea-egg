@@ -4,7 +4,7 @@ import {makeCells,patchGeometry,eggGeometry,makeTexturesAsync,eggPoint} from './
 import {createRound,tapShell} from './logic.mjs';
 import {eggKinds,teaKinds} from './catalog.mjs';
 import {talents,mechanics,mastery,masteryBonus,stampChanges,salePrice,yuan} from './progression.mjs';
-import {initTalents} from './talents.mjs';
+import {initTalents} from './talents.mjs?v=20261002-fold';
 import {stampArt} from './stamps.mjs';
 import {initFinance} from './finance.mjs';
 initFinance();
