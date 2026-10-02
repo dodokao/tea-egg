@@ -29,7 +29,7 @@ export function stampChanges(before,after) {
 }
 export function mechanics(kind,levels) {
   const base=kind.scale<.75?5:kind.scale>=1.45?8:kind.scale>1.12?7:6;
-  return {knocks:Math.max(1,base-(levels[1]?1:0)),peels:Math.max(6,kind.peels+16-[0,1,2,4][levels[2]]-(levels[27]?3:0)),stickyFactor:1-.2*levels[4],longPeel:Boolean(levels[5]),peelSpeed:levels[3]?.67:1,sweep:[0,8,6,4][levels[24]]};
+  return {knocks:Math.max(1,base-(levels[1]?1:0)),peels:Math.max(6,kind.peels+16-[0,1,2,4][levels[2]]-(levels[27]?6:0)),stickyFactor:1-.2*levels[4],longPeel:Boolean(levels[5]),peelSpeed:levels[3]?.67:1,sweep:[0,8,6,4][levels[24]]};
 }
 export function saleBreakdown(pair,counts,levels,repeat=counts.egg[pair.egg]>1&&counts.tea[pair.tea]>1) {
   const premium={C:0,B:10,A:30,S:80,SR:180,SSR:400};
@@ -101,7 +101,7 @@ export const talents=[
     {id:24,name:'清盘巧扫',parent:1,prices:[3,6,10],icon:'wind',effect:'盘中静止壳片达到 8 / 6 / 4 片时，自动触发清盘。'},
     {id:25,name:'趣味摊位',parent:6,prices:[3,6,10],icon:'compass',effect:'解锁 10 种趣味原料的进货资格：夜猫子蛋、战斗机蛋、动漫热血鸡蛋、滚蛋、魔法少女蛋、忍者鸡蛋、珍珠奶茶、抹茶拿铁、芝士乌龙、可乐快乐茶。所有已获得进货资格且需技能解锁的原料，其抽取权重分别提高 20% / 40% / 60%。'},
     {id:26,name:'定向进货',parent:16,prices:[12],icon:'bookmark',effect:'解锁指定原料功能。每次支付 15 元可指定下一颗蛋的蛋种或茶种，另一项随机。仅可选择已开放进货的品种，另需支付 2 元进货费用。'},
-    {id:27,name:'熟手剥壳',parent:3,prices:[28],icon:'zap',effect:'初始壳块数量额外减少 3 块，可与裂纹引导叠加，最低为 6 块。'},
+    {id:27,name:'熟手剥壳',parent:3,prices:[28],icon:'zap',effect:'初始壳块数量额外减少 6 块，可与裂纹引导叠加，最低为 6 块。'},
     {id:28,name:'奇蛋奇遇',parent:8,prices:[28],icon:'gem',effect:'解锁小恐龙蛋、鸵鸟蛋、坤蛋与 QQ 鹅蛋的进货资格。'},
     {id:29,name:'双章传家',parent:18,prices:[28],icon:'heart-handshake',effect:'本颗蛋的蛋种与茶种印章均达到 Lv.4 时，出售价格增加 0.25 元。'}
   ];

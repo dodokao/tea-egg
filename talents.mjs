@@ -1,4 +1,4 @@
-import {talents,routes,yuan,eggCost} from './progression.mjs';
+import {talents,routes,yuan,eggCost} from './progression.mjs?v=20261002-peel';
 const talentIcons={
   store:'M3 10h18l-2-6H5l-2 6Zm2 0v10h14V10M9 20v-6h6v6M3 10q2 4 4 0 2 4 5 0 2 4 5 0 2 4 4 0',
   hammer:'m5 20 9-9m-4-4 4-4 7 7-4 4-7-7Z',

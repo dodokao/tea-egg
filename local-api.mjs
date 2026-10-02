@@ -1,5 +1,5 @@
 import {eggKinds,teaKinds} from './catalog.mjs';
-import {talents,drawKind,salePrice,rarityOrder,eggCost,stampChanges,saleBreakdown} from './progression.mjs';
+import {talents,drawKind,salePrice,rarityOrder,eggCost,stampChanges,saleBreakdown} from './progression.mjs?v=20261002-peel';
 const giftCodes={yumi666:50000},uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const headers={},key='tea-egg-pages-v1',json=(data,status=200)=>Response.json(data,{status});
 const initial=(redeemed=[])=>({total:0,counts:{egg:eggKinds.map(()=>0),tea:teaKinds.map(()=>0)},money:200,talents:talents.map(()=>0),active:null,sequence:0,egg_streak:0,tea_streak:0,redeemed,eggs:{},entries:[]});

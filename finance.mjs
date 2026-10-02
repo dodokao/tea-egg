@@ -1,5 +1,5 @@
-import {fetch} from './local-api.mjs';
-import {yuan} from './progression.mjs';
+import {fetch} from './local-api.mjs?v=20261002-peel';
+import {yuan} from './progression.mjs?v=20261002-peel';
 const el=(tag,text,className)=>{const node=document.createElement(tag);if(text!==undefined)node.textContent=text;if(className)node.className=className;return node;};
 const signed=n=>(n>=0?'+':'−')+yuan(Math.abs(n));
 export function balancePoints(entries){if(!entries.length)return [];const ordered=[...entries].reverse();return [{balance:ordered[0].balance-ordered[0].amount,created:ordered[0].created,detail:{title:'期初余额'}},...ordered];}

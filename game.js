@@ -1,12 +1,12 @@
-import {fetch} from './local-api.mjs';
+import {fetch} from './local-api.mjs?v=20261002-peel';
 import * as THREE from './lib/three.module.js';
 import {makeCells,patchGeometry,eggGeometry,makeTexturesAsync,eggPoint} from './egg.mjs';
 import {createRound,tapShell} from './logic.mjs';
 import {eggKinds,teaKinds} from './catalog.mjs';
-import {talents,mechanics,mastery,masteryBonus,stampChanges,salePrice,yuan} from './progression.mjs';
-import {initTalents} from './talents.mjs?v=20261002-scroll';
+import {talents,mechanics,mastery,masteryBonus,stampChanges,salePrice,yuan} from './progression.mjs?v=20261002-peel';
+import {initTalents} from './talents.mjs?v=20261002-peel';
 import {stampArt,stampUrl} from './stamps.mjs?v=20261002-fast';
-import {initFinance} from './finance.mjs';
+import {initFinance} from './finance.mjs?v=20261002-peel';
 initFinance();
 const $=selector=>document.querySelector(selector);
 const surfacePhotos=await Promise.all(['./shell-albedo.jpg','./white-albedo.jpg'].map(src=>new THREE.ImageLoader().loadAsync(src))).catch(error=>{console.warn('Surface texture unavailable',error);return [];});
