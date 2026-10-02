@@ -5,7 +5,7 @@ import {createRound,tapShell} from './logic.mjs';
 import {eggKinds,teaKinds} from './catalog.mjs';
 import {talents,mechanics,mastery,masteryBonus,stampChanges,salePrice,yuan} from './progression.mjs';
 import {initTalents} from './talents.mjs?v=20261002-pinch';
-import {stampArt} from './stamps.mjs';
+import {stampArt,stampUrl} from './stamps.mjs?v=20261002-fast';
 import {initFinance} from './finance.mjs';
 initFinance();
 const $=selector=>document.querySelector(selector);
@@ -143,11 +143,12 @@ function patchBoundary(ids) {
 
 async function startRound(active=gameState?.active) {
   if(!active)return;
-  renderDirty=true;egg.visible=false;$("#shop-gate").hidden=false;$("#shop-title").textContent="正在准备这一颗蛋…";sweepMotions=[];
+  renderDirty=true;egg.visible=false;$('#finish').hidden=true;$('#discovery').hidden=true;$('.play-area').classList.remove('complete');$("#shop-gate").classList.add('preparing');$("#shop-gate").hidden=false;$("#shop-title").textContent="正在准备这一颗蛋…";sweepMotions=[];
   for(const patch of patches) {patch.group.removeFromParent();patch.membrane.removeFromParent();patch.membrane.geometry.dispose();}
   for(const mesh of meshes)mesh.geometry.dispose();patches=[];meshes=[];
   for(const t of textures)t.dispose();
   roundIndex=total??0;eggKind=eggKinds[active.egg];teaKind=teaKinds[active.tea];roundEffects=mechanics(eggKind,active.levels);
+  for(const [kind,item] of [['egg',eggKind],['tea',teaKind]]){const image=new Image();image.src=stampUrl(kind,item);}
   body.geometry.dispose();body.geometry=eggGeometry(1,eggKind);whole.geometry.dispose();whole.geometry=eggGeometry(1.023,eggKind);
   const character=['basketball','penguin'].includes(eggKind.motif),century=eggKind.motif==='century',gray=eggKind.name==='乌鸡蛋';
   wholeMaterial.color.set('#ffffff');shellMaterial.color.set('#ffffff');whiteMaterial.color.set(character||century?'#ffffff':eggKind.whiteTint);whiteMaterial.roughness=century?.18:gray?.28:character?.34:.39;whiteMaterial.clearcoat=century?.65:gray?.28:.16;whiteMaterial.clearcoatRoughness=gray?.30:.38;whiteMaterial.envMapIntensity=gray?.25:1;whiteMaterial.specularColor.set(gray?'#edf1ff':'#ffffff');whiteMaterial.transmission=century?.08:0;whiteMaterial.thickness=century?.12:0;whiteMaterial.attenuationColor.set('#c48e43');whiteMaterial.attenuationDistance=2;insideMaterial.color.set(eggKind.innerTint);shellMaterial.bumpScale=character?.003:eggKind.speckles?.022:.014;wholeMaterial.bumpScale=character?.003:.014;
@@ -176,7 +177,7 @@ async function startRound(active=gameState?.active) {
   }
   $('.play-area').classList.remove('complete');$('#finish').hidden=true;$('#discovery').hidden=true;
   $('#step-number').textContent='01';$('#step-label').textContent='先敲一敲';$('#instruction').textContent='轻点鸡蛋，唤醒一圈裂纹';
-  $('#toast').classList.remove('visible');$('#flip').disabled=false;$('#shop-gate').hidden=true;egg.visible=true;completedRecord=null;refreshCounters();resizeScene();
+  $('#toast').classList.remove('visible');$('#flip').disabled=false;$('#shop-gate').hidden=true;$('#shop-gate').classList.remove('preparing');egg.visible=true;completedRecord=null;refreshCounters();resizeScene();
   if(active.phase==='peeled'){round.phase='complete';round.clicks=active.clicks;round.remaining=0;for(const patch of patches){patch.data.released=true;patch.group.visible=false;}whole.visible=false;refreshCounters();finishRound(true);}
 }
 
@@ -312,7 +313,7 @@ canvas.addEventListener('keydown',event=>{
 function stampCard(item,index,kind,className='stamp') {
   const card=document.createElement('article');card.className=className;card.dataset.rarity=item.rarity;
   card.style.setProperty('--stamp-fill',kind==='egg'?item.stampColor:item.color);
-  card.innerHTML=`<span class="stamp-art">${stampArt(kind,item)}</span><span class="stamp-name">${item.name}</span><b class="rarity">${item.rarity}</b>`;return card;
+  card.innerHTML=`<span class="stamp-art">${stampArt(kind,item,className==='stamp'?'lazy':'eager')}</span><span class="stamp-name">${item.name}</span><b class="rarity">${item.rarity}</b>`;return card;
 }
 function discoveryCard(item,index,kind) {
   const entry=document.createElement('div');entry.className='discovery-entry';
@@ -379,6 +380,7 @@ async function loadTotal() {
   try{const response=await fetch('/api/game',{cache:'no-store'});if(!response.ok)throw Error();acceptCollection(await response.json());return true;}catch{showTotal();return false;}
 }
 function showShop() {
+  $('#shop-gate').classList.remove('preparing');
   $('#shop-gate').hidden=false;egg.visible=false;renderDirty=true;
   const state=gameState,tutorial=state&&!state.talents[0];
   $('#shop-title').textContent=tutorial?'先剥好第一颗蛋':state?'挑一颗，慢慢剥':'小摊暂时没有连上';
@@ -391,7 +393,7 @@ async function buyEgg(choice=null) {
     if(!gameState&&!await loadTotal())throw Error('小摊还没有连上，请再试一次。');
     if(gameState.active){if(roundId!==gameState.active.id)await startRound();return;}
     if(!purchaseId){purchaseId=crypto.randomUUID();purchaseChoice=choice?.kind?choice:null;}await gameAction({action:'buy',id:purchaseId,...(purchaseChoice?{choice:purchaseChoice}:{})});purchaseId=null;purchaseChoice=null;await startRound();canvas.focus({preventScroll:true});
-  }catch(error){if(error.status){purchaseId=null;purchaseChoice=null;}$('#shop-error').textContent=error.message;toast(error.message);}finally{purchasing=false;$('#buy-egg').disabled=false;refreshSale();}
+  }catch(error){if(error.status){purchaseId=null;purchaseChoice=null;}$('#shop-gate').classList.remove('preparing');$('#shop-error').textContent=error.message;toast(error.message);}finally{purchasing=false;$('#buy-egg').disabled=false;refreshSale();}
 }
 function refreshSale() {
   const active=gameState?.active,price=active?.phase==='peeled'?salePrice(active,savedCounts,gameState.talents,active.repeat):null;
@@ -426,8 +428,7 @@ $('#sell').onclick=async()=>{
   catch(error){$('#save-status').textContent=error.message;toast(error.message);}finally{selling=false;refreshSale();}
 };
 refreshTalents=initTalents(()=>gameState,async(id,rank)=>{await gameAction({action:'talent',talent:id,rank});toast('点亮了「'+talents[id].name+'」');if(!round&&$('#discovery').hidden)showShop();},toast);
-$('#collection').onclick=()=>{showTotal();$('#stamp-dialog').showModal();if(total===null)void loadTotal();};
-$('#finish-collection').onclick=()=>{showTotal();$('#stamp-dialog').showModal();if(total===null)void loadTotal();};
+$('#collection').onclick=$('#finish-collection').onclick=()=>{$('#stamp-dialog').showModal();showTotal();if(total===null)void loadTotal();};
 $('#close-stamps').onclick=()=>$('#stamp-dialog').close();
 $('#stamp-dialog').addEventListener('click',event=>{if(event.target===$('#stamp-dialog')){const r=event.target.getBoundingClientRect();if(event.clientX<r.left||event.clientX>r.right||event.clientY<r.top||event.clientY>r.bottom)event.target.close();}});
 window.addEventListener('online',()=>{if(completedRecord)void saveStamp();else void loadTotal().then(ok=>{if(ok&&!$('#shop-gate').hidden)showShop();});});
