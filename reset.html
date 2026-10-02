@@ -1,4 +1,5 @@
 <!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>重新开摊 · 慢慢剥</title><link rel="stylesheet" href="./style.css"></head><body><main class="catalog-wrap"><a class="catalog-back" href="./">← 回到小摊</a><h1>重新开摊</h1><p>重置当前浏览器的游戏账号：清空印章、天赋、零钱与正在剥的蛋，恢复 2 元零钱。第一颗是土鸡蛋＋红茶。</p><button class="primary-button" id="reset">清空我的进度，重新开始</button><p id="status" role="status"></p></main><script type="module">
+import {fetch} from "./local-api.mjs";
 const button=document.querySelector('#reset'),status=document.querySelector('#status');
 button.onclick=async()=>{button.disabled=true;status.textContent='正在重置…';try{const current=await fetch('/api/game',{cache:'no-store'});if(!current.ok)throw Error('账号暂时没有连上，请再试一次。');const response=await fetch('/api/game',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'reset'})});if(!response.ok)throw Error('重置没有完成，请再试一次。');location.replace('./');}catch(error){status.textContent=error.message;button.disabled=false;}};
 </script></body></html>
