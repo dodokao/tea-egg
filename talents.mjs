@@ -52,19 +52,37 @@ export function talentLayout(width) {
   }
   return {height,points};
 }
+export function zoomTalentView(view,scale,from,to,width,height,size) {
+  const min=Math.min(width/size,height/size),s=Math.max(min,Math.min(2.5,scale));
+  const constrain=(value,space)=>space>=0?space/2:Math.max(space,Math.min(0,value));
+  return {scale:s,x:constrain(to.x-(from.x-view.x)*s/view.scale,width-size*s),y:constrain(to.y-(from.y-view.y)*s/view.scale,height-size*s)};
+}
 export function initTalents(getState,buy,onError) {
   const dialog=document.querySelector('#talent-dialog'),board=dialog.querySelector('.talent-board'),svg=board.querySelector('svg'),detail=dialog.querySelector('.talent-detail'),nodes=[];
   let selected=0,busy=false;
-  const scroller=dialog.querySelector('.talent-scroller'),toggle=document.createElement('button');
-  toggle.className='talent-tree-toggle';toggle.type='button';scroller.id='skill-tree';toggle.setAttribute('aria-controls',scroller.id);scroller.before(toggle);
-  function foldTree(folded){scroller.hidden=folded;toggle.setAttribute('aria-expanded',String(!folded));toggle.textContent=folded?'展开技能图 ▾':'收起技能图 ▴';dialog.querySelector('.mobile-tree-hint').hidden=folded;if(!folded&&nodes.length)draw();}
-  toggle.onclick=()=>foldTree(!scroller.hidden);foldTree(false);
+  const scroller=dialog.querySelector('.talent-scroller'),controls=document.createElement('div');
+  scroller.classList.add('zoomable');scroller.id='skill-tree';controls.className='talent-zoom-controls';
+  controls.innerHTML='<button type="button" aria-label="缩小技能图">−</button><button type="button" class="zoom-fit">查看全貌</button><button type="button" aria-label="放大技能图">＋</button><output aria-live="polite"></output>';scroller.before(controls);
+  let view={scale:1,x:0,y:0},size=640,gesture=null,ignoreClickUntil=0,gestureMoved=false;
+  const pointers=new Map(),center=()=>({x:scroller.clientWidth/2,y:scroller.clientHeight/2});
+  function paint(){board.style.transform=`translate(${view.x}px,${view.y}px) scale(${view.scale})`;controls.querySelector('output').textContent=Math.round(view.scale*100)+'%';}
+  function zoom(scale,from=center(),to=from){view=zoomTalentView(view,scale,from,to,scroller.clientWidth,scroller.clientHeight,size);paint();}
+  function fit(){const c=center();view={scale:Math.min(scroller.clientWidth/size,scroller.clientHeight/size),x:0,y:0};zoom(view.scale,c);}
+  controls.children[0].onclick=()=>zoom(view.scale/1.25);controls.children[1].onclick=fit;controls.children[2].onclick=()=>zoom(view.scale*1.25);
+  const local=e=>{const r=scroller.getBoundingClientRect();return {x:e.clientX-r.left,y:e.clientY-r.top};};
+  function baseline(){const p=[...pointers.values()];gesture=p.length?{view:{...view},point:p[0],mid:p.length>1?{x:(p[0].x+p[1].x)/2,y:(p[0].y+p[1].y)/2}:p[0],distance:p.length>1?Math.hypot(p[1].x-p[0].x,p[1].y-p[0].y):0}:null;}
+  scroller.addEventListener('pointerdown',e=>{if(e.pointerType==='mouse'&&e.button!==0)return;if(!pointers.size)gestureMoved=false;pointers.set(e.pointerId,local(e));(e.target.closest('button')||scroller).setPointerCapture(e.pointerId);if(pointers.size>1){gestureMoved=true;ignoreClickUntil=Date.now()+400;}baseline();});
+  scroller.addEventListener('pointermove',e=>{if(!pointers.has(e.pointerId)||!gesture)return;pointers.set(e.pointerId,local(e));const p=[...pointers.values()];view={...gesture.view};if(p.length>1){gestureMoved=true;ignoreClickUntil=Date.now()+400;const mid={x:(p[0].x+p[1].x)/2,y:(p[0].y+p[1].y)/2},distance=Math.hypot(p[1].x-p[0].x,p[1].y-p[0].y);zoom(gesture.distance>0?gesture.view.scale*distance/gesture.distance:gesture.view.scale,gesture.mid,mid);}else{const dx=p[0].x-gesture.point.x,dy=p[0].y-gesture.point.y;if(Math.hypot(dx,dy)>6){gestureMoved=true;ignoreClickUntil=Date.now()+400;}zoom(view.scale,gesture.point,p[0]);}});
+  function end(e){if(!pointers.has(e.pointerId))return;if(gestureMoved)ignoreClickUntil=Date.now()+400;pointers.delete(e.pointerId);baseline();}
+  scroller.addEventListener('pointerup',end);scroller.addEventListener('pointercancel',end);scroller.addEventListener('lostpointercapture',end);
+  scroller.addEventListener('click',e=>{if(Date.now()<ignoreClickUntil){e.preventDefault();e.stopImmediatePropagation();}},true);
+  scroller.addEventListener('wheel',e=>{e.preventDefault();zoom(view.scale*Math.exp(-e.deltaY*.002),local(e));},{passive:false});
   const guide=document.createElement('div');guide.className='talent-guide';guide.innerHTML='<strong>解锁卖蛋 · 点亮你的小摊</strong><p>「开摊入门」是技能树的中心。免费点亮后，就能把刚刚剥好的蛋卖出去，收到第一笔收入。</p><button class="primary-button">免费点亮「开摊入门」 →</button>';dialog.querySelector('.talent-summary').after(guide);
   guide.querySelector('button').onclick=()=>{selected=0;render();detail.querySelector('button').click();};
   for(const t of talents){const node=document.createElement('button');node.className='talent-node';node.dataset.id=t.id;node.innerHTML=`<span class="talent-symbol" aria-hidden="true">${talentIcon(t.icon)}</span><small></small><span class="talent-name">${t.name}</span>`;node.onclick=()=>{selected=t.id;render();if(matchMedia('(max-width:700px)').matches)detail.scrollIntoView({behavior:'instant',block:'start'});};board.append(node);nodes.push(node);}
   const pathTo=id=>{const path=[];for(let t=talents[id];t;t=t.parent===null?null:talents[t.parent])path.unshift(t.name);return path.join(' → ');};
   function draw(){
-    const width=board.getBoundingClientRect().width;if(!width)return;
+    const width=board.clientWidth;if(!width)return;
     const {height,points}=talentLayout(width);board.style.height=height+'px';board.classList.toggle('compact',width<600);board.classList.toggle('unlabeled',width<734);
     svg.setAttribute('viewBox',`0 0 ${width} ${height}`);svg.replaceChildren();const levels=getState()?.talents??Array(30).fill(0);
     for(const t of talents){const p=points[t.id];nodes[t.id].style.left=p.x+'px';nodes[t.id].style.top=p.y+'px';nodes[t.id].style.setProperty('--route-color',p.color);if(t.parent===null)continue;
@@ -85,7 +103,8 @@ export function initTalents(getState,buy,onError) {
     note.hidden=!note.textContent;if(dialog.open)draw();
   }
   detail.querySelector('button').onclick=async()=>{if(busy)return;busy=true;const id=selected,rank=getState().talents[id];render();try{await buy(id,rank);if(id===0&&rank===0)dialog.close();}catch(error){onError(error.message);}finally{busy=false;render();}};
-  document.querySelector('#open-talents').onclick=()=>{if(!getState()?.talents[0])selected=0;dialog.showModal();render();dialog.scrollTop=0;const scroller=dialog.querySelector('.talent-scroller');scroller.scrollLeft=Math.max(0,(board.clientWidth-scroller.clientWidth)/2);};document.querySelector('#close-talents').onclick=()=>dialog.close();
-  dialog.querySelector('.back-to-tree').onclick=()=>{foldTree(false);scroller.scrollIntoView({behavior:'instant',block:'start'});};
-  new ResizeObserver(draw).observe(board);render();return ()=>{if(dialog.open)render();};
+  function resize(){if(!dialog.open||!scroller.clientWidth)return;size=Math.max(640,scroller.clientWidth);board.style.width=size+'px';scroller.style.height=Math.min(scroller.clientWidth,680)+'px';draw();fit();}
+  document.querySelector('#open-talents').onclick=()=>{if(!getState()?.talents[0])selected=0;pointers.clear();gesture=null;dialog.showModal();render();dialog.scrollTop=0;resize();};document.querySelector('#close-talents').onclick=()=>dialog.close();
+  dialog.querySelector('.back-to-tree').onclick=()=>scroller.scrollIntoView({behavior:'instant',block:'start'});
+  new ResizeObserver(resize).observe(scroller);render();return ()=>{if(dialog.open)render();};
 }
