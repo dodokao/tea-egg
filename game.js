@@ -1,12 +1,13 @@
 import {fetch} from './local-api.mjs?v=20261002-peel';
 import * as THREE from './lib/three.module.js';
 import {makeCells,patchGeometry,eggGeometry,makeTexturesAsync,eggPoint} from './egg.mjs';
-import {createRound,tapShell} from './logic.mjs';
+import {createRound,tapShell,randomFrom,snapshotRound,restoreRound} from './logic.mjs';
 import {eggKinds,teaKinds} from './catalog.mjs';
 import {talents,mechanics,mastery,masteryBonus,stampChanges,salePrice,yuan} from './progression.mjs?v=20261002-peel';
 import {initTalents} from './talents.mjs?v=20261002-peel';
 import {stampArt,stampUrl} from './stamps.mjs?v=20261002-fast';
 import {initFinance} from './finance.mjs?v=20261002-peel';
+import {initStorage} from './storage.mjs';
 initFinance();
 const $=selector=>document.querySelector(selector);
 const surfacePhotos=Promise.all(['./shell-albedo.webp','./white-albedo.webp'].map(src=>new THREE.ImageLoader().loadAsync(src))).catch(error=>{console.warn('Surface texture unavailable',error);return [];});
@@ -60,10 +61,10 @@ const body=new THREE.Mesh(eggGeometry(),whiteMaterial);
 const whole=new THREE.Mesh(eggGeometry(1.023),wholeMaterial);
 for(const mesh of [body,whole]){mesh.castShadow=true;mesh.receiveShadow=true;egg.add(mesh);}
 let renderDirty=true;const lastRenderedOrientation=new THREE.Quaternion();
-let round,cells=[],patches=[],meshes=[],textures=[],roundId,flipMotion=null,wobble=0,eggKind=eggKinds[0],teaKind=teaKinds[0],roundIndex=0;
+let round,cells=[],patches=[],meshes=[],textures=[],roundId,roundSeed,flipMotion=null,wobble=0,eggKind=eggKinds[0],teaKind=teaKinds[0],roundIndex=0;
 let sweepMotions=[];
 let total=null,saving=false,completedRecord=null,toastTimer,savedCounts={egg:[],tea:[]};
-let gameState=null,purchasing=false,purchaseId=null,purchaseChoice=null,roundEffects=null,refreshTalents=()=>{},selling=false;
+let gameState=null,purchasing=false,purchaseId=null,purchaseChoice=null,roundEffects=null,refreshTalents=()=>{},refreshStorage=()=>{},selling=false,storageBusy=false;
 const raycaster=new THREE.Raycaster(),pointer=new THREE.Vector2();
 const up=new THREE.Vector3(0,1,0),right=new THREE.Vector3(1,0,0);
 let soundVolume=.7;try{const saved=localStorage.getItem("tea-volume");if(saved!==null&&Number.isFinite(Number(saved)))soundVolume=Math.max(0,Math.min(1,Number(saved)));}catch{}
@@ -141,7 +142,7 @@ function patchBoundary(ids) {
   return [...edges.values()].filter(edge=>edge.count===1).sort((a,b)=>b.a.distanceToSquared(b.b)-a.a.distanceToSquared(a.b))[0]||{a:cells[ids[0]].corners[0],b:cells[ids[0]].corners[1]};
 }
 
-async function startRound(active=gameState?.active) {
+async function startRound(active=gameState?.active,fromStorage=false) {
   if(!active)return;
   renderDirty=true;egg.visible=false;$('#finish').hidden=true;$('#discovery').hidden=true;$('.play-area').classList.remove('complete');$("#shop-gate").classList.add('preparing');$("#shop-gate").hidden=false;$("#shop-title").textContent="正在准备这一颗蛋…";sweepMotions=[];
   for(const patch of patches) {patch.group.removeFromParent();patch.membrane.removeFromParent();patch.membrane.geometry.dispose();}
@@ -152,8 +153,10 @@ async function startRound(active=gameState?.active) {
   body.geometry.dispose();body.geometry=eggGeometry(1,eggKind);whole.geometry.dispose();whole.geometry=eggGeometry(1.023,eggKind);
   const character=['basketball','penguin'].includes(eggKind.motif),century=eggKind.motif==='century',gray=eggKind.name==='乌鸡蛋';
   wholeMaterial.color.set('#ffffff');shellMaterial.color.set('#ffffff');whiteMaterial.color.set(character||century?'#ffffff':eggKind.whiteTint);whiteMaterial.roughness=century?.18:gray?.28:character?.34:.39;whiteMaterial.clearcoat=century?.65:gray?.28:.16;whiteMaterial.clearcoatRoughness=gray?.30:.38;whiteMaterial.envMapIntensity=gray?.25:1;whiteMaterial.specularColor.set(gray?'#edf1ff':'#ffffff');whiteMaterial.transmission=century?.08:0;whiteMaterial.thickness=century?.12:0;whiteMaterial.attenuationColor.set('#c48e43');whiteMaterial.attenuationDistance=2;insideMaterial.color.set(eggKind.innerTint);shellMaterial.bumpScale=character?.003:eggKind.speckles?.022:.014;wholeMaterial.bumpScale=character?.003:.014;
-  cells=makeCells();round=createRound(cells.map(c=>c.neighbors),Math.random,roundEffects.peels,roundEffects);roundId=active.id;
-  textures=await makeTexturesAsync(cells,await surfacePhotos,Math.random,eggKind,teaKind,512);
+  roundSeed=parseInt(active.id.replaceAll('-','').slice(0,8),16);
+  cells=makeCells(randomFrom(roundSeed));round=createRound(cells.map(c=>c.neighbors),randomFrom(roundSeed^0x9e3779b9),roundEffects.peels,roundEffects);roundId=active.id;
+  if(active.progress)restoreRound(round,active.progress);
+  textures=await makeTexturesAsync(cells,await surfacePhotos,randomFrom(roundSeed^0x85ebca6b),eggKind,teaKind,512);
   wholeMaterial.map=textures[0];wholeMaterial.bumpMap=textures[3];wholeMaterial.needsUpdate=true;
   shellMaterial.map=textures[1];shellMaterial.bumpMap=textures[3];shellMaterial.needsUpdate=true;
   whiteMaterial.map=textures[2];whiteMaterial.bumpMap=textures[3];whiteMaterial.bumpScale=century?.0006:character?.0005:.002;whiteMaterial.needsUpdate=true;
@@ -161,6 +164,7 @@ async function startRound(active=gameState?.active) {
   membraneMaterial.color.set(eggKind.innerTint).lerp(new THREE.Color('#fff9ef'),.68);
   meshes=[];patches=[];flipMotion=null;
   egg.quaternion.setFromEuler(new THREE.Euler(character?.06:.12,character?0:Math.random()*Math.PI,character?-.06:-1.4));egg.scale.setScalar(eggDisplayScale);egg.position.y=character?eggKind.height*eggKind.scale*eggDisplayScale+.22:1.67;
+  if(active.progress)egg.quaternion.fromArray(active.progress.rotation).normalize();
   contactShadow.scale.setScalar(Math.max(.45,eggKind.scale*eggDisplayScale));
   whole.visible=true;
   for(const data of round.patches) {
@@ -178,7 +182,12 @@ async function startRound(active=gameState?.active) {
   $('.play-area').classList.remove('complete');$('#finish').hidden=true;$('#discovery').hidden=true;
   $('#step-number').textContent='01';$('#step-label').textContent='先敲一敲';$('#instruction').textContent='轻点鸡蛋，唤醒一圈裂纹';
   $('#toast').classList.remove('visible');$('#flip').disabled=false;$('#shop-gate').hidden=true;$('#shop-gate').classList.remove('preparing');egg.visible=true;completedRecord=null;refreshCounters();resizeScene();
-  if(active.phase==='peeled'){round.phase='complete';round.clicks=active.clicks;round.remaining=0;for(const patch of patches){patch.data.released=true;patch.group.visible=false;}whole.visible=false;refreshCounters();finishRound(true);}
+  if(active.phase==='peeled'){round.phase='complete';round.clicks=active.clicks;round.remaining=0;for(const patch of patches){patch.data.released=true;patch.group.visible=false;}whole.visible=false;refreshCounters();finishRound(true,fromStorage);}
+  else if(active.progress){
+    if(round.phase==='cracking'&&round.knocks)wholeMaterial.map=textures[1];
+    if(round.phase==='peeling'){whole.visible=false;$('#step-number').textContent='02';$('#step-label').textContent='慢慢剥开';$('#instruction').textContent='点一片壳，看看能带下多少';for(const patch of patches){patch.group.visible=!patch.data.released;if(patch.data.loosened&&!patch.data.released){patch.group.position.copy(patch.base).addScaledVector(patch.normal,.045);updateMembrane(patch,.08);}}}
+  }
+  refreshSale();
 }
 
 function updateMembrane(patch,amount) {
@@ -229,6 +238,7 @@ function hitAt(clientX,clientY) {
   return raycaster.intersectObjects(targets,false)[0];
 }
 function acceptTap(cell) {
+  if(storageBusy)return {type:'ignored'};
   const action=tapShell(round,cell);
   if(action.type==='ignored')return action;
   if(action.type==='knock'||action.type==='cracked') {
@@ -239,12 +249,12 @@ function acceptTap(cell) {
   } else {
     const patch=patches[round.byCell[cell]];
     if(action.type==='loosen') {renderDirty=true;playSound('loosen');patch.group.position.copy(patch.base).addScaledVector(patch.normal,.045);updateMembrane(patch,.08);}
-    else {playSound('peel',action.cells.length);(action.patches??[round.byCell[cell]]).forEach((index,i)=>{if(i)setTimeout(()=>beginPeel(patches[index]),75*i);else beginPeel(patches[index]);});}
+    else {playSound('peel',action.cells.length);(action.patches??[round.byCell[cell]]).forEach((index,i)=>{const patch=patches[index],id=roundId;if(i)setTimeout(()=>{if(roundId===id)beginPeel(patch);},75*i);else beginPeel(patch);});}
     if(action.complete) {
       const id=roundId;setTimeout(()=>{if(roundId===id)finishRound();},reducedMotion?300:1100);
     }
   }
-  refreshCounters();return action;
+  refreshCounters();if(action.complete)refreshSale();return action;
 }
 function tapAt(x,y) {
   if(!round||round.phase==='complete'||!$('#shop-gate').hidden)return;
@@ -260,11 +270,11 @@ let gesture=null;
 canvas.addEventListener('pointerdown',event=>{
   if(event.button!==0||!event.isPrimary)return;
   canvas.focus({preventScroll:true});canvas.setPointerCapture(event.pointerId);
-  if(!round||!$('#shop-gate').hidden)return;
+  if(storageBusy||!round||!$('#shop-gate').hidden)return;
   flipMotion=null;gesture={id:event.pointerId,x:event.clientX,y:event.clientY,lastX:event.clientX,lastY:event.clientY,drag:false};
 });
 canvas.addEventListener('pointermove',event=>{
-  if(!gesture||event.pointerId!==gesture.id)return;
+  if(storageBusy||!gesture||event.pointerId!==gesture.id)return;
   if(Math.hypot(event.clientX-gesture.x,event.clientY-gesture.y)>7)gesture.drag=true;
   if(gesture.drag) {
     const yaw=new THREE.Quaternion().setFromAxisAngle(up,(event.clientX-gesture.lastX)*.008);
@@ -367,28 +377,34 @@ function acceptCollection(data) {
   if(!Number.isSafeInteger(data.total)||data.total<0||!['egg','tea'].every(key=>Array.isArray(data.counts?.[key])&&data.counts[key].length===(key==='egg'?eggKinds.length:teaKinds.length)&&data.counts[key].every(n=>Number.isSafeInteger(n)&&n>=0&&n<=data.total)&&data.counts[key].reduce((sum,n)=>sum+n,0)===data.total))throw Error('印章数据没有同步好。');
   if(!Number.isSafeInteger(data.money)||data.money<0||!Array.isArray(data.talents)||data.talents.length!==talents.length||data.talents.some((n,i)=>!Number.isInteger(n)||n<0||n>talents[i].prices.length))throw Error('零钱数据没有同步好。');
   if(data.active&&(!eggKinds[data.active.egg]||!teaKinds[data.active.tea]||!Array.isArray(data.active.levels)||data.active.levels.length!==30))throw Error('鸡蛋数据没有同步好。');
-  gameState=data;total=data.total;savedCounts=data.counts;$('#money').textContent=yuan(data.money);showTotal();refreshTalents();refreshSale();
+  data.inventory??=[];
+  if(!Array.isArray(data.inventory)||data.inventory.some(pair=>!eggKinds[pair.egg]||!teaKinds[pair.tea]||!['peeling','peeled'].includes(pair.phase)||!Array.isArray(pair.levels)||pair.levels.length!==30))throw Error('储存室数据没有同步好。');
+  gameState=data;total=data.total;savedCounts=data.counts;$('#money').textContent=yuan(data.money);showTotal();refreshTalents();refreshSale();refreshStorage();
 }
 async function gameAction(body) {
   const previous=gameState;
   const response=await fetch('/api/game',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}),data=await response.json();
-  if(data.state)acceptCollection(data.state);
+  if(data.state){acceptCollection(data.state);if(data.state.active?.id!==roundId)await syncStoredRound();}
   if(!response.ok){const error=Error(data.error||'小摊没有连上，请再试一次。');error.status=response.status;throw error;}
-  acceptCollection(data);if(body.action==='talent'&&previous){const changes=stampChanges(previous,data);if(changes.length){$('#talent-dialog').close();showStampNotices(changes);}}return data;
+  acceptCollection(data);
+  if(data.active?.id!==roundId&&!['buy','store','take'].includes(body.action)&&!(body.action==='sell'&&body.id===roundId&&!data.active))await syncStoredRound();
+  if(body.action==='talent'&&previous){const changes=stampChanges(previous,data);if(changes.length){$('#talent-dialog').close();showStampNotices(changes);}}return data;
 }
 async function loadTotal() {
   try{const response=await fetch('/api/game',{cache:'no-store'});if(!response.ok)throw Error();acceptCollection(await response.json());return true;}catch{showTotal();return false;}
 }
 function showShop() {
+  if(!gameState?.active){$('#finish').hidden=true;$('#discovery').hidden=true;$('.play-area').classList.remove('complete');}
   $('#shop-gate').classList.remove('preparing');
   $('#shop-gate').hidden=false;egg.visible=false;renderDirty=true;
   const state=gameState,tutorial=state&&!state.talents[0];
   $('#shop-title').textContent=tutorial?'先剥好第一颗蛋':state?'挑一颗，慢慢剥':'小摊暂时没有连上';
   $('#shop-copy').textContent=tutorial?'先买一颗蛋，轻点敲碎蛋壳，再慢慢揭下来。剥好后，我们再学怎么卖蛋。新手零钱 2 元，买一颗花 2 元。':state?'每次进货随机遇见一种蛋和一种茶。普通搭配基础售价 2.20 元，稀有品种和熟练度会提高售价。':'连接恢复后，零钱和印章会一起回来。';
+  if(state?.inventory?.length)$('#shop-copy').textContent=`储存室里还有 ${state.inventory.length} 颗蛋，可以取出接着剥，或出售已经剥好的蛋。也可以花 2 元进货新的一颗。`;
   $('#buy-egg').disabled=purchasing;$('#buy-egg').textContent=state?'买一颗蛋 · ¥2.00':'重新连接';
 }
 async function buyEgg(choice=null) {
-  if(purchasing)return;purchasing=true;$('#buy-egg').disabled=true;$('#next').disabled=true;$('#shop-error').textContent='';
+  if(purchasing||storageBusy||selling)return;purchasing=true;$('#buy-egg').disabled=true;$('#next').disabled=true;$('#shop-error').textContent='';
   try {
     if(!gameState&&!await loadTotal())throw Error('小摊还没有连上，请再试一次。');
     if(gameState.active){if(roundId!==gameState.active.id)await startRound();return;}
@@ -398,35 +414,67 @@ async function buyEgg(choice=null) {
 function refreshSale() {
   const active=gameState?.active,price=active?.phase==='peeled'?salePrice(active,savedCounts,gameState.talents,active.repeat):null;
   const needsTalent=price!==null&&!gameState.talents[0];
-  $('#sell').disabled=Boolean(saving||selling||completedRecord||price===null||needsTalent);$('#sell').textContent=needsTalent?'卖出 · 先解锁开摊入门':selling?'正在卖出…':price!==null?'卖出 · '+yuan(price):'已卖出，零钱已到账';
+  $('#sell').disabled=Boolean(saving||selling||storageBusy||completedRecord||price===null||needsTalent);$('#sell').textContent=needsTalent?'卖出 · 先解锁开摊入门':selling?'正在卖出…':price!==null?'卖出 · '+yuan(price):'已卖出，零钱已到账';
+  $('#finish').classList.toggle('sold',!active);
+  $('#store-active').hidden=!active||active.phase!=='peeling';$('#store-active').disabled=Boolean(storageBusy||saving||selling||purchasing||!active||round?.phase==='complete');
+  $('#store-finished').hidden=!active||active.phase!=='peeled';$('#store-finished').disabled=Boolean(storageBusy||saving||selling||completedRecord||!active);
   $('#sale-guide').hidden=!needsTalent;$('#open-talents').classList.toggle('tutorial-target',needsTalent);
-  $('#next').disabled=Boolean(saving||selling||completedRecord||active);
+  $('#next').disabled=Boolean(saving||selling||storageBusy||completedRecord||active);
   for(const id of ['#order-egg','#order-next']){$(id).hidden=!gameState?.talents[26];$(id).disabled=Boolean(purchasing||saving||selling||completedRecord||active);}
   $('.buy-actions').classList.toggle('has-order',Boolean(gameState?.talents[26]));
 }
 async function saveStamp() {
   if(saving||!completedRecord)return;const record=completedRecord;saving=true;refreshSale();$('#save-status').classList.remove('error');$('#save-status').textContent='正在盖上这一枚小印章…';
-  try {await gameAction({action:'finish',id:record.id,clicks:record.clicks});completedRecord=null;$('#save-status').textContent='两枚印章各累计 1 次 · 剥好 '+total+' 颗';showStampNotices(gameState.active?.notices||[]);}
-  catch(error){$('#save-status').classList.add('error');$('#save-status').textContent='这枚印章还没存好，';const retry=document.createElement('button');retry.textContent='再试一次';retry.onclick=saveStamp;$('#save-status').append(retry);}
+  try {await gameAction({action:'finish',id:record.id,clicks:record.clicks});completedRecord=null;if(gameState.active?.id===record.id){$('#save-status').textContent='两枚印章各累计 1 次 · 剥好 '+total+' 颗';showStampNotices(gameState.active?.notices||[]);}}
+  catch(error){if(!completedRecord)return;$('#save-status').classList.add('error');$('#save-status').textContent='这枚印章还没存好，';const retry=document.createElement('button');retry.textContent='再试一次';retry.onclick=saveStamp;$('#save-status').append(retry);}
   finally{saving=false;refreshSale();}
 }
-function finishRound(restored=false) {
+function finishRound(restored=false,fromStorage=false) {
   if(!restored&&(!$('#finish').hidden||!$('#discovery').hidden))return;
-  $('.play-area').classList.add('complete');$('#finish-clicks').textContent=round.clicks;$('#step-number').textContent='03';$('#instruction').textContent='剥好了，可以卖出换点零钱';
+  $('.play-area').classList.add('complete');$('#finish-clicks').textContent=round.clicks;$('#step-number').textContent='03';$('#instruction').textContent='剥好了，可以卖出，也可以暂存';
   const eggIndex=eggKinds.indexOf(eggKind),teaIndex=teaKinds.indexOf(teaKind);
   $('#finish-stamps').replaceChildren(stampCard(eggKind,eggIndex,'egg','finish-stamp'),stampCard(teaKind,teaIndex,'tea','finish-stamp'));
   $('#discovery').hidden=true;$('#finish').hidden=false;
-  if(restored){showStampNotices(gameState.active?.notices||[]);$('#save-status').textContent='印章已入册，卖出这颗蛋即可收到零钱。';refreshSale();}else{completedRecord={id:roundId,clicks:round.clicks};void saveStamp();}
+  if(restored){if(!fromStorage&&!gameState.active?.storedComplete)showStampNotices(gameState.active?.notices||[]);$('#save-status').textContent='印章已入册，可以直接卖出，也可以放入储存室。';refreshSale();}else{completedRecord={id:roundId,clicks:round.clicks};void saveStamp();}
 }
 $('#discovery-accept').onclick=showNextStampNotice;
 $('#next').onclick=buyEgg;$('#buy-egg').onclick=buyEgg;
 $('#sale-guide-open').onclick=()=>$('#open-talents').click();
-$('#sell').onclick=async()=>{
-  if(selling||saving||completedRecord||gameState?.active?.phase!=='peeled')return;
+async function sellEgg(id) {
+  if(selling||storageBusy||saving||completedRecord)throw Error('正在保存这颗蛋，请稍等。');
   selling=true;refreshSale();const before=gameState.money;
-  try{await gameAction({action:'sell',id:roundId});$('#save-status').textContent='卖出收入 '+yuan(gameState.money-before)+' · 零钱已到账';toast('收好零钱，再挑一颗吧');}
-  catch(error){$('#save-status').textContent=error.message;toast(error.message);}finally{selling=false;refreshSale();}
+  try{const state=await gameAction({action:'sell',id});if(id===roundId)$('#save-status').textContent='卖出收入 '+yuan(gameState.money-before)+' · 零钱已到账';toast('卖出收入 '+yuan(gameState.money-before)+' · 零钱已到账');return state;}
+  finally{selling=false;refreshSale();refreshStorage();}
+}
+$('#sell').onclick=async()=>{
+  if(selling||storageBusy||saving||completedRecord||gameState?.active?.phase!=='peeled')return;
+  try{await sellEgg(roundId);}catch(error){$('#save-status').textContent=error.message;toast(error.message);}
 };
+async function storageAction(action,id) {
+  if(action==='sell')return sellEgg(id);
+  if(storageBusy||selling||purchasing||saving||completedRecord||gameState?.active?.phase==='peeling'&&round?.phase==='complete')throw Error('正在保存这颗蛋，请稍等。');
+  const active=gameState?.active;
+  if(active?.phase==='peeling'&&(!round||roundId!==active.id))throw Error('鸡蛋还在准备中，请稍等。');
+  const progress=active?.phase==='peeling'?snapshotRound(round,roundSeed,egg.quaternion.toArray()):undefined;
+  storageBusy=true;gesture=null;refreshSale();
+  try{
+    try{await gameAction({action,id,...(progress?{progress}:{})});}
+    catch(error){
+      if(!error.status)await loadTotal();
+      const committed=action==='take'?gameState?.active?.id===id:gameState?.inventory?.some(pair=>pair.id===id);
+      if(!committed){if(gameState?.active?.id!==roundId)await syncStoredRound();throw error;}
+    }
+    await syncStoredRound();
+    if(action==='store')toast('已放入储存室，随时可以取出');
+  }finally{storageBusy=false;refreshSale();refreshStorage();}
+}
+async function syncStoredRound() {
+  completedRecord=null;
+  if(gameState?.active){await startRound(gameState.active,Boolean(gameState.active.storedComplete));canvas.focus({preventScroll:true});}
+  else{round=null;roundId=null;flipMotion=null;wobble=0;sweepMotions=[];for(const patch of patches){patch.motion=null;patch.group.visible=false;patch.membrane.visible=false;}showShop();}
+}
+$('#store-active').onclick=$('#store-finished').onclick=async()=>{try{await storageAction('store',gameState.active.id);}catch(error){toast(error.message);}};
+refreshStorage=initStorage(()=>gameState,storageAction,toast);
 refreshTalents=initTalents(()=>gameState,async(id,rank)=>{await gameAction({action:'talent',talent:id,rank});toast('点亮了「'+talents[id].name+'」');if(!round&&$('#discovery').hidden)showShop();},toast);
 $('#collection').onclick=$('#finish-collection').onclick=()=>{$('#stamp-dialog').showModal();showTotal();if(total===null)void loadTotal();};
 $('#close-stamps').onclick=()=>$('#stamp-dialog').close();

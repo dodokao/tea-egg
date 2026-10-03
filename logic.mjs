@@ -53,3 +53,16 @@ export function tapShell(round,cell) {
   if(round.remaining===0)round.phase='complete';
   return {type:'peel',cells:[...patch.cells,...carried.flatMap(p=>p.cells)],patches:[patchIndex,...carried.map(p=>round.patches.indexOf(p))],complete:round.phase==='complete'};
 }
+
+export function snapshotRound(round,seed,rotation) {
+  const ids=key=>round.patches.flatMap((patch,index)=>patch[key]?[index]:[]);
+  const removed=round.patches.reduce((sum,patch)=>sum+(patch.released?patch.cells.length:0),0);
+  return {seed,phase:round.phase,knocks:round.knocks,clicks:round.clicks,released:ids('released'),loosened:ids('loosened'),longPeel:round.longPeel,rotation,percent:Math.min(99,Math.round(removed/round.byCell.length*100))};
+}
+
+export function restoreRound(round,progress) {
+  Object.assign(round,{phase:progress.phase,knocks:progress.knocks,clicks:progress.clicks,longPeel:progress.longPeel});
+  round.patches.forEach((patch,index)=>{patch.released=progress.released.includes(index);patch.loosened=progress.loosened.includes(index);});
+  round.remaining=round.patches.filter(patch=>!patch.released).length;
+  return round;
+}

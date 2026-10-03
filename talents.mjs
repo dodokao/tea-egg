@@ -95,7 +95,7 @@ export function initTalents(getState,buy,onError) {
     guide.hidden=!state||Boolean(levels[0]);guide.querySelector('button').disabled=busy||!state;
     dialog.querySelector('.talent-summary').textContent=`余额 ${state?yuan(state.money):'待同步'} · 已点亮 ${levels.filter(n=>n>0).length} / 30`;
     for(const t of talents){const node=nodes[t.id],rank=levels[t.id],ready=t.parent===null||levels[t.parent]>0;node.dataset.status=rank?'active':ready?'available':'locked';node.querySelector('small').textContent=`${rank} / ${t.prices.length}`;node.setAttribute('aria-pressed',String(t.id===selected));node.setAttribute('aria-label',`${t.name}，${rank} / ${t.prices.length}${!ready?'，需要先点亮'+talents[t.parent].name:''}`);node.title=t.name;}
-    const t=talents[selected],rank=levels[t.id],ready=t.parent===null||levels[t.parent]>0,full=rank===t.prices.length,price=t.prices[rank],reserve=t.id===0||state?.active?.phase==='peeling'?0:eggCost;
+    const t=talents[selected],rank=levels[t.id],ready=t.parent===null||levels[t.parent]>0,full=rank===t.prices.length,price=t.prices[rank],reserve=t.id===0||state?.active?.phase==='peeling'||state?.inventory?.some(pair=>pair.phase==='peeling')?0:eggCost;
     detail.querySelector('h3').textContent=`${t.name} · ${rank} / ${t.prices.length}`;detail.querySelector('.talent-effect').textContent=t.effect;detail.querySelector('.talent-path').textContent=pathTo(selected);
     const button=detail.querySelector('button');button.disabled=busy||!state||full||!ready||state.money-price<reserve;
     button.textContent=full?'已点满':`${busy?'正在点亮…':rank?'升一层':'点亮'} · ${price?yuan(price):'免费'}`;
