@@ -8,6 +8,7 @@ import {initTalents} from './talents.mjs?v=20261002-peel';
 import {stampArt,stampUrl} from './stamps.mjs?v=20261002-fast';
 import {initFinance} from './finance.mjs?v=20261002-peel';
 import {initStorage} from './storage.mjs';
+import {initTutorial} from './tutorial.mjs';
 initFinance();
 const $=selector=>document.querySelector(selector);
 const surfacePhotos=Promise.all(['./shell-albedo.webp','./white-albedo.webp'].map(src=>new THREE.ImageLoader().loadAsync(src))).catch(error=>{console.warn('Surface texture unavailable',error);return [];});
@@ -64,7 +65,7 @@ let renderDirty=true;const lastRenderedOrientation=new THREE.Quaternion();
 let round,cells=[],patches=[],meshes=[],textures=[],roundId,roundSeed,flipMotion=null,wobble=0,eggKind=eggKinds[0],teaKind=teaKinds[0],roundIndex=0;
 let sweepMotions=[];
 let total=null,saving=false,completedRecord=null,toastTimer,savedCounts={egg:[],tea:[]};
-let gameState=null,purchasing=false,purchaseId=null,purchaseChoice=null,roundEffects=null,refreshTalents=()=>{},refreshStorage=()=>{},selling=false,storageBusy=false;
+let gameState=null,purchasing=false,purchaseId=null,purchaseChoice=null,roundEffects=null,refreshTalents=()=>{},refreshStorage=()=>{},refreshTutorial=()=>{},selling=false,storageBusy=false;
 const raycaster=new THREE.Raycaster(),pointer=new THREE.Vector2();
 const up=new THREE.Vector3(0,1,0),right=new THREE.Vector3(1,0,0);
 let soundVolume=.7;try{const saved=localStorage.getItem("tea-volume");if(saved!==null&&Number.isFinite(Number(saved)))soundVolume=Math.max(0,Math.min(1,Number(saved)));}catch{}
@@ -187,7 +188,7 @@ async function startRound(active=gameState?.active,fromStorage=false) {
     if(round.phase==='cracking'&&round.knocks)wholeMaterial.map=textures[1];
     if(round.phase==='peeling'){whole.visible=false;$('#step-number').textContent='02';$('#step-label').textContent='慢慢剥开';$('#instruction').textContent='点一片壳，看看能带下多少';for(const patch of patches){patch.group.visible=!patch.data.released;if(patch.data.loosened&&!patch.data.released){patch.group.position.copy(patch.base).addScaledVector(patch.normal,.045);updateMembrane(patch,.08);}}}
   }
-  refreshSale();
+  refreshSale();refreshTutorial();
 }
 
 function updateMembrane(patch,amount) {
@@ -254,7 +255,7 @@ function acceptTap(cell) {
       const id=roundId;setTimeout(()=>{if(roundId===id)finishRound();},reducedMotion?300:1100);
     }
   }
-  refreshCounters();if(action.complete)refreshSale();return action;
+  refreshCounters();if(action.complete)refreshSale();refreshTutorial();return action;
 }
 function tapAt(x,y) {
   if(!round||round.phase==='complete'||!$('#shop-gate').hidden)return;
@@ -337,7 +338,7 @@ function showStampNotices(changes) {
 }
 function showNextStampNotice() {
   const change=stampNoticeQueue.shift();
-  if(!change){$('#discovery').hidden=true;$('#finish').hidden=gameState?.active?.phase!=='peeled';if(!gameState?.active)showShop();return;}
+  if(!change){$('#discovery').hidden=true;$('#finish').hidden=gameState?.active?.phase!=='peeled';if(!gameState?.active)showShop();refreshTutorial();return;}
   const upgrades=change.to>change.from,fresh=change.fresh;
   $('#discovery-title').textContent=upgrades?(fresh?'恭喜，新印章入册，也升级啦！':'恭喜，你的印章升级啦！'):'恭喜，发现了新的小印章！';
   $('#discovery-label').textContent=upgrades?'印章养成 · 收益提升':'新印章入册';
@@ -353,7 +354,7 @@ function showNextStampNotice() {
     }
     return entry;
   }));
-  $('#discovery').hidden=false;$('#finish').hidden=true;$('#shop-gate').hidden=true;$('#discovery-accept').textContent=stampNoticeQueue.length?'收好这一枚，下一枚 →':'太好了，继续 →';$('#discovery-accept').focus({preventScroll:true});
+  $('#discovery').hidden=false;$('#finish').hidden=true;$('#shop-gate').hidden=true;$('#discovery-accept').textContent=stampNoticeQueue.length?'收好这一枚，下一枚 →':'太好了，继续 →';$('#discovery-accept').focus({preventScroll:true});refreshTutorial();
 }
 function renderStampSet(target,items,counts,kind) {
   target.replaceChildren();
@@ -387,6 +388,7 @@ async function gameAction(body) {
   if(data.state){acceptCollection(data.state);if(data.state.active?.id!==roundId)await syncStoredRound();}
   if(!response.ok){const error=Error(data.error||'小摊没有连上，请再试一次。');error.status=response.status;throw error;}
   acceptCollection(data);
+  if(body.action==='reset')refreshTutorial('reset');
   if(data.active?.id!==roundId&&!['buy','store','take'].includes(body.action)&&!(body.action==='sell'&&body.id===roundId&&!data.active))await syncStoredRound();
   if(body.action==='talent'&&previous){const changes=stampChanges(previous,data);if(changes.length){$('#talent-dialog').close();showStampNotices(changes);}}return data;
 }
@@ -401,7 +403,7 @@ function showShop() {
   $('#shop-title').textContent=tutorial?'先剥好第一颗蛋':state?'挑一颗，慢慢剥':'小摊暂时没有连上';
   $('#shop-copy').textContent=tutorial?'先买一颗蛋，轻点敲碎蛋壳，再慢慢揭下来。剥好后，我们再学怎么卖蛋。新手零钱 2 元，买一颗花 2 元。':state?'每次进货随机遇见一种蛋和一种茶。普通搭配基础售价 2.20 元，稀有品种和熟练度会提高售价。':'连接恢复后，零钱和印章会一起回来。';
   if(state?.inventory?.length)$('#shop-copy').textContent=`储存室里还有 ${state.inventory.length} 颗蛋，可以取出接着剥，或出售已经剥好的蛋。也可以花 2 元进货新的一颗。`;
-  $('#buy-egg').disabled=purchasing;$('#buy-egg').textContent=state?'买一颗蛋 · ¥2.00':'重新连接';
+  $('#buy-egg').disabled=purchasing;$('#buy-egg').textContent=state?'买一颗蛋 · ¥2.00':'重新连接';refreshTutorial();
 }
 async function buyEgg(choice=null) {
   if(purchasing||storageBusy||selling)return;purchasing=true;$('#buy-egg').disabled=true;$('#next').disabled=true;$('#shop-error').textContent='';
@@ -419,9 +421,11 @@ function refreshSale() {
   $('#store-active').hidden=!active||active.phase!=='peeling';$('#store-active').disabled=Boolean(storageBusy||saving||selling||purchasing||!active||round?.phase==='complete');
   $('#store-finished').hidden=!active||active.phase!=='peeled';$('#store-finished').disabled=Boolean(storageBusy||saving||selling||completedRecord||!active);
   $('#sale-guide').hidden=!needsTalent;$('#open-talents').classList.toggle('tutorial-target',needsTalent);
+  $('.mobile-nav [data-open="open-talents"]').classList.toggle('tutorial-target',needsTalent);
   $('#next').disabled=Boolean(saving||selling||storageBusy||completedRecord||active);
   for(const id of ['#order-egg','#order-next']){$(id).hidden=!gameState?.talents[26];$(id).disabled=Boolean(purchasing||saving||selling||completedRecord||active);}
   $('.buy-actions').classList.toggle('has-order',Boolean(gameState?.talents[26]));
+  refreshTutorial();
 }
 async function saveStamp() {
   if(saving||!completedRecord)return;const record=completedRecord;saving=true;refreshSale();$('#save-status').classList.remove('error');$('#save-status').textContent='正在盖上这一枚小印章…';
@@ -443,7 +447,7 @@ $('#sale-guide-open').onclick=()=>$('#open-talents').click();
 async function sellEgg(id) {
   if(selling||storageBusy||saving||completedRecord)throw Error('正在保存这颗蛋，请稍等。');
   selling=true;refreshSale();const before=gameState.money;
-  try{const state=await gameAction({action:'sell',id});if(id===roundId)$('#save-status').textContent='卖出收入 '+yuan(gameState.money-before)+' · 零钱已到账';toast('卖出收入 '+yuan(gameState.money-before)+' · 零钱已到账');return state;}
+  try{const state=await gameAction({action:'sell',id});refreshTutorial('sell');if(id===roundId)$('#save-status').textContent='卖出收入 '+yuan(gameState.money-before)+' · 零钱已到账';toast('卖出收入 '+yuan(gameState.money-before)+' · 零钱已到账');return state;}
   finally{selling=false;refreshSale();refreshStorage();}
 }
 $('#sell').onclick=async()=>{
@@ -476,6 +480,7 @@ async function syncStoredRound() {
 $('#store-active').onclick=$('#store-finished').onclick=async()=>{try{await storageAction('store',gameState.active.id);}catch(error){toast(error.message);}};
 refreshStorage=initStorage(()=>gameState,storageAction,toast);
 refreshTalents=initTalents(()=>gameState,async(id,rank)=>{await gameAction({action:'talent',talent:id,rank});toast('点亮了「'+talents[id].name+'」');if(!round&&$('#discovery').hidden)showShop();},toast);
+refreshTutorial=initTutorial(()=>({state:gameState,phase:round?.phase,ready:Boolean(round&&roundId===gameState?.active?.id),blocked:Boolean(saving||completedRecord||!$('#discovery').hidden||$('#shop-gate').classList.contains('preparing'))}));
 $('#collection').onclick=$('#finish-collection').onclick=()=>{$('#stamp-dialog').showModal();showTotal();if(total===null)void loadTotal();};
 $('#close-stamps').onclick=()=>$('#stamp-dialog').close();
 $('#stamp-dialog').addEventListener('click',event=>{if(event.target===$('#stamp-dialog')){const r=event.target.getBoundingClientRect();if(event.clientX<r.left||event.clientX>r.right||event.clientY<r.top||event.clientY>r.bottom)event.target.close();}});
